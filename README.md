@@ -22,4 +22,6 @@
 ## نصب و راه‌اندازی
 1. اسکریپت نصب را اجرا کنید:
    ```bash
-   ./install.sh
+   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Adler-tak/mikrotik-restream/main/setup.sh)"
+
+
