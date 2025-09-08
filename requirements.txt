@@ -1,0 +1,3 @@
+requests
+routeros-api
+python-dotenv
