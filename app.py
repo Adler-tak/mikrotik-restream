@@ -255,12 +255,8 @@ HTML_TEMPLATE = """
                 </div>
                 
                 <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 cursor-pointer">
-                        <input type="checkbox" id="autoApplyToggle" checked class="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0">
-                        <span>اعمال خودکار هنگام انتخاب</span>
-                    </label>
                     <button onclick="loadInterfaces(true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium transition" title="استعلام زنده اینترفیس‌ها">
-                        <span id="refreshIcon">🔄</span> استعلام زنده
+                        <span id="refreshIcon">🔄</span> استعلام زنده اینترفیس‌ها
                     </button>
                 </div>
             </div>
@@ -295,7 +291,7 @@ HTML_TEMPLATE = """
                     </button>
                     <button id="syncBtn" onclick="triggerSync()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-blue-600/30 transition flex items-center gap-2">
                         <span id="syncSpinner" class="hidden animate-spin">⏳</span>
-                        <span>⚡ همگام‌سازی دستی مسیرها (Sync)</span>
+                        <span>⚡ همگام‌سازی مسیرها (Sync)</span>
                     </button>
                 </div>
             </div>
@@ -533,13 +529,7 @@ HTML_TEMPLATE = """
             document.getElementById('customGatewayInput').value = effectiveGateway;
 
             const ispDesc = isp ? ` (${isp.toUpperCase()})` : '';
-            log(`🎯 اینترفیس انتخابی: ${ifaceName}${ispDesc} -> گیت‌وی خودکار: ${effectiveGateway}`);
-
-            // If auto-apply is enabled, trigger sync immediately!
-            if (document.getElementById('autoApplyToggle').checked) {
-                log(`⚡ در حال اعمال خودکار تغییرات روی گیت‌وی ${effectiveGateway}...`);
-                triggerSync(effectiveGateway);
-            }
+            log(`🎯 اینترفیس ${ifaceName}${ispDesc} انتخاب شد -> گیت‌وی روی ${effectiveGateway} تنظیم شد. برای اعمال، دکمه همگام‌سازی را بزنید.`);
         }
 
         async function loadTargets() {
