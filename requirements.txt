@@ -1,3 +1,5 @@
-requests
-routeros-api
-python-dotenv
+requests>=2.28.0
+routeros-api>=0.17.0
+python-dotenv>=1.0.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
