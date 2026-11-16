@@ -95,7 +95,7 @@ def get_status():
 @app.get("/api/interfaces", dependencies=[Depends(check_auth)])
 def get_interfaces():
     """
-    Live query: returns fresh list of interfaces directly from MikroTik.
+    Live query: returns fresh list of interfaces directly from MikroTik with auto-detected gateways.
     """
     mgr = MikroTikManager()
     try:
@@ -134,7 +134,6 @@ def add_or_update_target(target: TargetModel):
 @app.delete("/api/targets/{target_id}", dependencies=[Depends(check_auth)])
 def delete_target(target_id: str):
     targets = load_targets()
-    # Don't delete built-in defaults completely, just disable or remove custom
     new_targets = [t for t in targets if t.get("id") != target_id]
     save_targets(new_targets)
     return {"status": "ok", "targets": new_targets}
@@ -251,12 +250,16 @@ HTML_TEMPLATE = """
                         <span>🎯</span> خروجی اینترنت استریم (Interface / Gateway)
                     </h2>
                     <p class="text-xs text-slate-400 mt-1">
-                        انتخاب کنید که ترافیک استریم (Restream, Aparat, etc.) از کدام اینترفیس یا اینترنت خارج شود.
+                        با انتخاب اینترفیس، گیت‌وی به صورت خودکار شناسایی و روت‌ها بلافاصله به آن منتقل می‌شوند.
                     </p>
                 </div>
                 
-                <div class="flex items-center gap-2">
-                    <button onclick="loadInterfaces(true)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium transition" title="استعلام زنده اینترفیس‌ها">
+                <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-2 text-xs text-slate-300 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800 cursor-pointer">
+                        <input type="checkbox" id="autoApplyToggle" checked class="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0">
+                        <span>اعمال خودکار هنگام انتخاب</span>
+                    </label>
+                    <button onclick="loadInterfaces(true)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-medium transition" title="استعلام زنده اینترفیس‌ها">
                         <span id="refreshIcon">🔄</span> استعلام زنده
                     </button>
                 </div>
@@ -265,16 +268,18 @@ HTML_TEMPLATE = """
             <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-2">
                 <!-- Dropdown -->
                 <div class="md:col-span-7">
+                    <label class="block text-xs text-slate-400 mb-1.5">انتخاب اینترفیس مقصد:</label>
                     <div class="relative">
-                        <select id="interfaceSelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
+                        <select id="interfaceSelect" onchange="onInterfaceChange()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
                             <option value="">در حال دریافت اینترفیس‌های فعال...</option>
                         </select>
                     </div>
                 </div>
 
                 <!-- Custom IP Input Toggle -->
-                <div class="md:col-span-5 flex items-center gap-2">
-                    <input type="text" id="customGatewayInput" placeholder="یا آی‌پی دستی: مثلا 192.168.10.1" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-left" dir="ltr">
+                <div class="md:col-span-5">
+                    <label class="block text-xs text-slate-400 mb-1.5">گیت‌وی فعال (شناسایی خودکار / قابل ویرایش):</label>
+                    <input type="text" id="customGatewayInput" placeholder="مثلا 192.168.8.1 یا ether3" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-left" dir="ltr">
                 </div>
             </div>
 
@@ -290,7 +295,7 @@ HTML_TEMPLATE = """
                     </button>
                     <button id="syncBtn" onclick="triggerSync()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-blue-600/30 transition flex items-center gap-2">
                         <span id="syncSpinner" class="hidden animate-spin">⏳</span>
-                        <span>⚡ همگام‌سازی و تغییر مسیرها (Sync)</span>
+                        <span>⚡ همگام‌سازی دستی مسیرها (Sync)</span>
                     </button>
                 </div>
             </div>
@@ -458,7 +463,7 @@ HTML_TEMPLATE = """
                 // Render active routes table
                 const tbody = document.getElementById('routesTableBody');
                 if (!data.active_stream_routes || data.active_stream_routes.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-500 font-sans">هیچ روت استریمی هنوز ثبت نشده است. دکمه همگام‌سازی را بزنید.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-500 font-sans">هیچ روت استریمی هنوز ثبت نشده است. از بالا یک اینترفیس انتخاب کنید.</td></tr>`;
                 } else {
                     tbody.innerHTML = data.active_stream_routes.map(r => `
                         <tr class="hover:bg-slate-900/40 transition">
@@ -475,7 +480,6 @@ HTML_TEMPLATE = """
                 }
 
                 if (data.default_gateway && !document.getElementById('customGatewayInput').value) {
-                    // prefill
                     document.getElementById('customGatewayInput').value = data.default_gateway;
                 }
 
@@ -498,8 +502,11 @@ HTML_TEMPLATE = """
                     sel.innerHTML = '<option value="">-- انتخاب اینترفیس خروجی --</option>' + 
                         data.interfaces.map(iface => {
                             const iconStatus = iface.running ? '🟢' : '⚪';
-                            const ipsStr = iface.ips.length ? `[${iface.ips.join(', ')}]` : '';
-                            return `<option value="${iface.name}">${iconStatus} ${iface.name} ${ipsStr} (${iface.type})</option>`;
+                            const gw = iface.gateway_ip ? `GW: ${iface.gateway_ip}` : '';
+                            const isp = iface.isp ? `[${iface.isp.toUpperCase()}]` : '';
+                            const ips = iface.ips.length ? `(IP: ${iface.ips[0]})` : '';
+                            const extra = [isp, gw, ips].filter(Boolean).join(' ');
+                            return `<option value="${iface.name}" data-gateway="${iface.gateway_ip || ''}" data-isp="${iface.isp || ''}">${iconStatus} ${iface.name} ${extra}</option>`;
                         }).join('');
                     log(`Received ${data.interfaces.length} live interfaces.`);
                 } else {
@@ -509,6 +516,29 @@ HTML_TEMPLATE = """
                 log('Error loading interfaces: ' + err);
             } finally {
                 if (showAnim) setTimeout(() => icon.classList.remove('animate-spin'), 600);
+            }
+        }
+
+        function onInterfaceChange() {
+            const sel = document.getElementById('interfaceSelect');
+            const selectedOption = sel.options[sel.selectedIndex];
+            if (!selectedOption || !sel.value) return;
+
+            const gwIp = selectedOption.getAttribute('data-gateway') || '';
+            const isp = selectedOption.getAttribute('data-isp') || '';
+            const ifaceName = sel.value;
+
+            // Automatically choose Gateway IP if known, otherwise interface name
+            const effectiveGateway = gwIp || ifaceName;
+            document.getElementById('customGatewayInput').value = effectiveGateway;
+
+            const ispDesc = isp ? ` (${isp.toUpperCase()})` : '';
+            log(`🎯 اینترفیس انتخابی: ${ifaceName}${ispDesc} -> گیت‌وی خودکار: ${effectiveGateway}`);
+
+            // If auto-apply is enabled, trigger sync immediately!
+            if (document.getElementById('autoApplyToggle').checked) {
+                log(`⚡ در حال اعمال خودکار تغییرات روی گیت‌وی ${effectiveGateway}...`);
+                triggerSync(effectiveGateway);
             }
         }
 
@@ -581,10 +611,10 @@ HTML_TEMPLATE = """
             }
         }
 
-        async function triggerSync() {
+        async function triggerSync(explicitGateway = null) {
             const ifaceVal = document.getElementById('interfaceSelect').value;
             const customVal = document.getElementById('customGatewayInput').value.trim();
-            const gateway = customVal || ifaceVal;
+            const gateway = explicitGateway || customVal || ifaceVal;
 
             if (!gateway) {
                 alert('لطفا ابتدا یک اینترفیس یا یک آی‌پی گیت‌وی را انتخاب کنید.');
@@ -607,13 +637,13 @@ HTML_TEMPLATE = """
                 const data = await res.json();
 
                 if (data.status === 'ok') {
-                    log(`SYNC SUCCESS! Added: ${data.added}, Updated: ${data.updated}, Unchanged: ${data.unchanged}`);
+                    log(`✅ تغییرات اعمال شد! افزوده شده: ${data.added} | بروزرسانی شده: ${data.updated} | بدون تغییر: ${data.unchanged}`);
                     if (data.logs) {
                         data.logs.forEach(l => log(l));
                     }
                     loadStatus();
                 } else {
-                    log(`SYNC FAILED: ${data.message}`);
+                    log(`❌ خطا در همگام‌سازی: ${data.message}`);
                     if (data.logs) {
                         data.logs.forEach(l => log(l));
                     }

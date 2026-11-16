@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import socket
 import logging
@@ -125,7 +126,7 @@ class MikroTikManager:
 
     def get_live_interfaces(self) -> List[Dict[str, Any]]:
         """
-        LIVE query of all interfaces and their IP addresses directly from RouterOS.
+        LIVE query of all interfaces, their assigned IPs, and their auto-detected Gateway IPs from /ip/route.
         """
         pool = self.connect()
         try:
@@ -146,6 +147,26 @@ class MikroTikManager:
             except Exception as e:
                 logger.warning(f"Could not fetch IP addresses: {e}")
 
+            # Automatically detect Gateway IP and ISP comments from /ip/route
+            iface_gateways = {}
+            try:
+                routes = api.get_resource('/ip/route').get()
+                for r in routes:
+                    gw_stat = r.get('gateway-status', '')
+                    comm = r.get('comment', '')
+                    dst = r.get('dst-address', '')
+                    
+                    # Search pattern like '192.168.0.1 reachable via ether1'
+                    match = re.search(r'([0-9\.]+)\s+reachable via\s+(\S+)', gw_stat)
+                    if match:
+                        gw_ip = match.group(1)
+                        iface_name = match.group(2)
+                        # Prefer default route (0.0.0.0/0) gateways
+                        if iface_name not in iface_gateways or dst == '0.0.0.0/0':
+                            iface_gateways[iface_name] = {'gateway_ip': gw_ip, 'comment': comm}
+            except Exception as e:
+                logger.warning(f"Could not detect route gateways: {e}")
+
             interfaces = []
             for item in raw_interfaces:
                 name = item.get('name', '')
@@ -155,6 +176,23 @@ class MikroTikManager:
                 comment = item.get('comment', '')
                 ips = ip_map.get(name, [])
 
+                gw_data = iface_gateways.get(name, {})
+                gw_ip = gw_data.get('gateway_ip', '')
+                isp = gw_data.get('comment', '')
+
+                # Build descriptive label
+                details = []
+                if isp:
+                    details.append(isp.upper())
+                if gw_ip:
+                    details.append(f"Gateway: {gw_ip}")
+                elif ips:
+                    details.append(f"IP: {ips[0]}")
+                
+                status_text = "Running" if running else "Down"
+                details_str = f" [{', '.join(details)}]" if details else ""
+                label = f"{name}{details_str} ({status_text})"
+
                 interfaces.append({
                     "id": item.get('id') or item.get('.id'),
                     "name": name,
@@ -163,7 +201,9 @@ class MikroTikManager:
                     "disabled": disabled,
                     "comment": comment,
                     "ips": ips,
-                    "label": f"{name} ({', '.join(ips) if ips else iface_type}) - {'Running' if running else 'Down'}"
+                    "gateway_ip": gw_ip,
+                    "isp": isp,
+                    "label": label
                 })
 
             return interfaces
